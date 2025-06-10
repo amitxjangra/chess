@@ -814,7 +814,7 @@ function App() {
       }
       if (type === "point") {
         setTurn((prev) => !prev);
-        castle(kingPos, rookPos);
+        // castle(kingPos, rookPos);
         setPositions((prev) => {
           let prevPos = { ...prev };
           for (const property in prevPos) {
