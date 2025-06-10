@@ -1,14 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 
-const initialPositon = {
-  "00": { name: "rook", color: "black" },
+const initialPosition = {
+  "00": { name: "rook", color: "black", hasMoved: false },
   "01": { name: "knight", color: "black" },
   "02": { name: "bishop", color: "black" },
-  "03": { name: "king", color: "black" },
-  "04": { name: "queen", color: "black" },
+  "04": { name: "king", color: "black", hasMoved: false },
+  "03": { name: "queen", color: "black" },
   "05": { name: "bishop", color: "black" },
   "06": { name: "knight", color: "black" },
-  "07": { name: "rook", color: "black" },
+  "07": { name: "rook", color: "black", hasMoved: false },
   10: { name: "pawn", color: "black" },
   11: { name: "pawn", color: "black" },
   12: { name: "pawn", color: "black" },
@@ -25,14 +25,14 @@ const initialPositon = {
   65: { name: "pawn", color: "white" },
   66: { name: "pawn", color: "white" },
   67: { name: "pawn", color: "white" },
-  70: { name: "rook", color: "white" },
+  70: { name: "rook", color: "white", hasMoved: false },
   71: { name: "knight", color: "white" },
   72: { name: "bishop", color: "white" },
-  73: { name: "king", color: "white" },
-  74: { name: "queen", color: "white" },
+  73: { name: "queen", color: "white" },
+  74: { name: "king", color: "white", hasMoved: false },
   75: { name: "bishop", color: "white" },
   76: { name: "knight", color: "white" },
-  77: { name: "rook", color: "white" },
+  77: { name: "rook", color: "white", hasMoved: false },
 };
 
 const nameIconSet = {
@@ -56,17 +56,19 @@ const row = Array(8).fill("");
 
 function App() {
   const [turn, setTurn] = useState(true); // true for white
-  const [positions, setPositions] = useState(initialPositon);
+  const [positions, setPositions] = useState(initialPosition);
   const selected = useRef(null);
   const [deleted, setDeleted] = useState([]);
-  const killPawn = useCallback(
+
+  const kill = useCallback(
     (killer, target) => {
       if (positions[target].name) {
         setDeleted((deletedTemp) => [
           ...deletedTemp,
-          positions?.[target]?.name,
+          positions?.[target]?.name + positions?.[target]?.color,
         ]);
       }
+      setTurn((prev) => !prev);
       setPositions((prev) => {
         let tempData = { ...prev };
         delete tempData[killer];
@@ -86,6 +88,13 @@ function App() {
 
   const drawSuggestion = useCallback(
     (x, y, type, color) => {
+      if (turn && positions[`${x}${y}`].color === "black") {
+        if (!positions[`${x}${y}`].target) return;
+      }
+      if (!turn && positions[`${x}${y}`].color === "white") {
+        if (!positions[`${x}${y}`].target) return;
+      }
+
       if (selected.current === `${x}${y}`) {
         setPositions((prev) => {
           let prevPos = { ...prev };
@@ -99,10 +108,22 @@ function App() {
           return prevPos;
         });
         return;
+      } else if (positions[`${x}${y}`].name !== "point") {
+        setPositions((prev) => {
+          let prevPos = { ...prev };
+          for (const property in prevPos) {
+            if (prevPos[property]?.name === "point") {
+              delete prevPos[property];
+            }
+            if (prevPos[property]?.target) prevPos[property].target = false;
+          }
+          selected.current = `${x}${y}`;
+          return prevPos;
+        });
       }
       if (type === "pawn") {
         if (positions?.[`${x}${y}`]?.target) {
-          killPawn(selected?.current, `${x}${y}`);
+          kill(selected?.current, `${x}${y}`);
           return;
         }
         selected.current = `${x}${y}`;
@@ -119,13 +140,15 @@ function App() {
               ...(prev[`${x + 1}${y - 1}`]?.name && {
                 [`${x + 1}${y - 1}`]: {
                   ...prev[`${x + 1}${y - 1}`],
-                  target: true,
+                  ...(prev[`${x + 1}${y - 1}`].color !==
+                    prev[selected.current].color && { target: true }),
                 },
               }),
               ...(prev[`${x + 1}${y + 1}`]?.name && {
                 [`${x + 1}${y + 1}`]: {
                   ...prev[`${x + 1}${y + 1}`],
-                  target: true,
+                  ...(prev[`${x + 1}${y + 1}`].color !==
+                    prev[selected.current].color && { target: true }),
                 },
               }),
               [`${x + 2}${y}`]:
@@ -150,10 +173,18 @@ function App() {
                 ? { ...prev[`${x - 1}${y}`] }
                 : { name: "point" },
             [`${x - 1}${y - 1}`]: prev[`${x - 1}${y - 1}`]?.name
-              ? { ...prev[`${x - 1}${y - 1}`], target: true }
+              ? {
+                  ...prev[`${x - 1}${y - 1}`],
+                  ...(prev[`${x - 1}${y - 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : {},
             [`${x - 1}${y + 1}`]: prev[`${x - 1}${y + 1}`]?.name
-              ? { ...prev[`${x - 1}${y + 1}`], target: true }
+              ? {
+                  ...prev[`${x - 1}${y + 1}`],
+                  ...(prev[`${x - 1}${y + 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : {},
             [`${x - 2}${y}`]:
               x === 6 || x === 1
@@ -169,7 +200,12 @@ function App() {
         }
       }
       if (type === "rook") {
+        if (positions?.[`${x}${y}`]?.target) {
+          kill(selected?.current, `${x}${y}`);
+          return;
+        }
         selected.current = `${x}${y}`;
+
         setPositions((prev) => {
           let prevPos = { ...prev };
           let iterator = 0;
@@ -179,13 +215,18 @@ function App() {
             top: false,
             bottom: false,
           };
+
           while (iterator <= 7) {
             if (iterator > x && !detection.bottom) {
               if (prevPos[`${iterator}${y}`]?.name) {
-                prevPos[`${iterator}${y}`] = {
-                  ...prevPos[`${iterator}${y}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${iterator}${y}`].color
+                )
+                  prevPos[`${iterator}${y}`] = {
+                    ...prevPos[`${iterator}${y}`],
+                    target: true,
+                  };
                 detection.bottom = true;
               } else {
                 prevPos[`${iterator}${y}`] = { name: "point" };
@@ -193,13 +234,17 @@ function App() {
             }
             if (!detection.top) {
               if (prevPos[`${x - iterator - 1}${y}`]?.name) {
-                prevPos[`${x - iterator - 1}${y}`] = {
-                  ...prevPos[`${x - iterator - 1}${y}`],
-                  target:
-                    prevPos[`${x - iterator - 1}${y}`]?.color !== color
-                      ? true
-                      : false,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - iterator - 1}${y}`].color
+                )
+                  prevPos[`${x - iterator - 1}${y}`] = {
+                    ...prevPos[`${x - iterator - 1}${y}`],
+                    target:
+                      prevPos[`${x - iterator - 1}${y}`]?.color !== color
+                        ? true
+                        : false,
+                  };
                 detection.top = true;
               } else {
                 prevPos[`${x - iterator - 1}${y}`] = { name: "point" };
@@ -208,10 +253,14 @@ function App() {
 
             if (!detection.right) {
               if (prevPos[`${x}${y + iterator + 1}`]?.name) {
-                prevPos[`${x}${y + iterator + 1}`] = {
-                  ...prevPos[`${x}${y + iterator + 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x}${y + iterator + 1}`].color
+                )
+                  prevPos[`${x}${y + iterator + 1}`] = {
+                    ...prevPos[`${x}${y + iterator + 1}`],
+                    target: true,
+                  };
                 detection.right = true;
               } else {
                 prevPos[`${x}${y + iterator + 1}`] = { name: "point" };
@@ -219,10 +268,14 @@ function App() {
             }
             if (!detection.left) {
               if (prevPos[`${x}${y - iterator - 1}`]?.name) {
-                prevPos[`${x}${y - iterator - 1}`] = {
-                  ...prevPos[`${x}${y - iterator - 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x}${y - iterator - 1}`].color
+                )
+                  prevPos[`${x}${y - iterator - 1}`] = {
+                    ...prevPos[`${x}${y - iterator - 1}`],
+                    target: true,
+                  };
                 detection.left = true;
               } else {
                 prevPos[`${x}${y - iterator - 1}`] = { name: "point" };
@@ -234,6 +287,10 @@ function App() {
         });
       }
       if (type === "king") {
+        if (positions?.[`${x}${y}`]?.target) {
+          kill(selected?.current, `${x}${y}`);
+          return;
+        }
         selected.current = `${x}${y}`;
         setPositions((prev) => ({
           ...prev,
@@ -241,53 +298,91 @@ function App() {
             prev[`${x - 1}${y - 1}`]?.name === "point"
               ? {}
               : prev[`${x - 1}${y - 1}`]?.name
-              ? { ...prev[`${x - 1}${y - 1}`], target: true }
+              ? {
+                  ...prev[`${x - 1}${y - 1}`],
+                  ...(prev[`${x - 1}${y - 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x - 1}${y}`]:
             prev[`${x - 1}${y}`]?.name === "point"
               ? {}
               : prev[`${x - 1}${y}`]?.name
-              ? { ...prev[`${x - 1}${y}`], target: true }
+              ? {
+                  ...prev[`${x - 1}${y}`],
+                  ...(prev[`${x - 1}${y}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x - 1}${y + 1}`]:
             prev[`${x - 1}${y + 1}`]?.name === "point"
               ? {}
               : prev[`${x - 1}${y + 1}`]?.name
-              ? { ...prev[`${x - 1}${y + 1}`], target: true }
+              ? {
+                  ...prev[`${x - 1}${y + 1}`],
+                  ...(prev[`${x - 1}${y + 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x}${y + 1}`]:
             prev[`${x}${y + 1}`]?.name === "point"
               ? {}
               : prev[`${x}${y + 1}`]?.name
-              ? { ...prev[`${x}${y + 1}`], target: true }
+              ? {
+                  ...prev[`${x}${y + 1}`],
+                  ...(prev[`${x}${y + 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x}${y - 1}`]:
             prev[`${x}${y - 1}`]?.name === "point"
               ? {}
               : prev[`${x}${y - 1}`]?.name
-              ? { ...prev[`${x}${y - 1}`], target: true }
+              ? {
+                  ...prev[`${x}${y - 1}`],
+                  ...(prev[`${x}${y - 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x + 1}${y - 1}`]:
             prev[`${x + 1}${y - 1}`]?.name === "point"
               ? {}
               : prev[`${x + 1}${y - 1}`]?.name
-              ? { ...prev[`${x + 1}${y - 1}`], target: true }
+              ? {
+                  ...prev[`${x + 1}${y - 1}`],
+                  ...(prev[`${x + 1}${y - 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x + 1}${y}`]:
             prev[`${x + 1}${y}`]?.name === "point"
               ? {}
               : prev[`${x + 1}${y}`]?.name
-              ? { ...prev[`${x + 1}${y}`], target: true }
+              ? {
+                  ...prev[`${x + 1}${y}`],
+                  ...(prev[`${x + 1}${y}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
           [`${x + 1}${y + 1}`]:
             prev[`${x + 1}${y + 1}`]?.name === "point"
               ? {}
               : prev[`${x + 1}${y + 1}`]?.name
-              ? { ...prev[`${x + 1}${y + 1}`], target: true }
+              ? {
+                  ...prev[`${x + 1}${y + 1}`],
+                  ...(prev[`${x + 1}${y + 1}`].color !==
+                    prev[selected.current].color && { target: true }),
+                }
               : { name: "point" },
+          ...(true && { [`${x}${y + 2}`]: { name: "point" } }),
+          ...(true && { [`${x}${y - 2}`]: { name: "point" } }),
         }));
       }
       if (type === "bishop") {
+        if (positions?.[`${x}${y}`]?.target) {
+          kill(selected?.current, `${x}${y}`);
+          return;
+        }
         selected.current = `${x}${y}`;
         setPositions((prev) => {
           let prevPos = { ...prev };
@@ -301,10 +396,14 @@ function App() {
           while (iterator <= 7) {
             if (!detection.tl) {
               if (prevPos[`${x - 1 - iterator}${y - 1 - iterator}`]?.name) {
-                prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
-                  ...prevPos[`${x - 1 - iterator}${y - 1 - iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 1 - iterator}${y - 1 - iterator}`].color
+                )
+                  prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
+                    ...prevPos[`${x - 1 - iterator}${y - 1 - iterator}`],
+                    target: true,
+                  };
                 detection.tl = true;
               } else {
                 prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
@@ -315,10 +414,14 @@ function App() {
 
             if (!detection.bl) {
               if (prevPos[`${x + 1 + iterator}${y - 1 - iterator}`]?.name) {
-                prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
-                  ...prevPos[`${x + 1 + iterator}${y - 1 - iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 1 + iterator}${y - 1 - iterator}`].color
+                )
+                  prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
+                    ...prevPos[`${x + 1 + iterator}${y - 1 - iterator}`],
+                    target: true,
+                  };
                 detection.bl = true;
               } else {
                 prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
@@ -328,10 +431,14 @@ function App() {
             }
             if (!detection.tr) {
               if (prevPos[`${x - 1 - iterator}${y + 1 + iterator}`]?.name) {
-                prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
-                  ...prevPos[`${x - 1 - iterator}${y + 1 + iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 1 - iterator}${y + 1 + iterator}`].color
+                )
+                  prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
+                    ...prevPos[`${x - 1 - iterator}${y + 1 + iterator}`],
+                    target: true,
+                  };
                 detection.tr = true;
               } else {
                 prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
@@ -342,10 +449,14 @@ function App() {
 
             if (!detection.br) {
               if (prevPos[`${x + 1 + iterator}${y + 1 + iterator}`]?.name) {
-                prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
-                  ...prevPos[`${x + 1 + iterator}${y + 1 + iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 1 + iterator}${y + 1 + iterator}`].color
+                )
+                  prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
+                    ...prevPos[`${x + 1 + iterator}${y + 1 + iterator}`],
+                    target: true,
+                  };
                 detection.br = true;
               } else {
                 prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
@@ -359,6 +470,10 @@ function App() {
         });
       }
       if (type === "knight") {
+        if (positions?.[`${x}${y}`]?.target) {
+          kill(selected?.current, `${x}${y}`);
+          return;
+        }
         selected.current = `${x}${y}`;
         setPositions((prev) => {
           let prevPos = { ...prev };
@@ -379,10 +494,14 @@ function App() {
                 prevPos[`${x + 2}${y - 1}`]?.name &&
                 prevPos[`${x + 2}${y - 1}`]?.name !== "point"
               ) {
-                prevPos[`${x + 2}${y - 1}`] = {
-                  ...prevPos[`${x + 2}${y - 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 2}${y - 1}`].color
+                )
+                  prevPos[`${x + 2}${y - 1}`] = {
+                    ...prevPos[`${x + 2}${y - 1}`],
+                    target: true,
+                  };
                 detection.bl = true;
               } else {
                 prevPos[`${x + 2}${y - 1}`] = {
@@ -395,10 +514,14 @@ function App() {
                 prevPos[`${x + 1}${y - 2}`]?.name &&
                 prevPos[`${x + 1}${y - 2}`]?.name !== "point"
               ) {
-                prevPos[`${x + 1}${y - 2}`] = {
-                  ...prevPos[`${x + 1}${y - 2}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 1}${y - 2}`].color
+                )
+                  prevPos[`${x + 1}${y - 2}`] = {
+                    ...prevPos[`${x + 1}${y - 2}`],
+                    target: true,
+                  };
                 detection.lb = true;
               } else {
                 prevPos[`${x + 1}${y - 2}`] = {
@@ -411,10 +534,14 @@ function App() {
                 prevPos[`${x - 1}${y - 2}`]?.name &&
                 prevPos[`${x - 1}${y - 2}`]?.name !== "point"
               ) {
-                prevPos[`${x - 1}${y - 2}`] = {
-                  ...prevPos[`${x - 1}${y - 2}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 1}${y - 2}`].color
+                )
+                  prevPos[`${x - 1}${y - 2}`] = {
+                    ...prevPos[`${x - 1}${y - 2}`],
+                    target: true,
+                  };
                 detection.lt = true;
               } else {
                 prevPos[`${x - 1}${y - 2}`] = {
@@ -427,10 +554,14 @@ function App() {
                 prevPos[`${x - 2}${y - 1}`]?.name &&
                 prevPos[`${x - 2}${y - 1}`]?.name !== "point"
               ) {
-                prevPos[`${x - 2}${y - 1}`] = {
-                  ...prevPos[`${x - 2}${y - 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 2}${y - 1}`].color
+                )
+                  prevPos[`${x - 2}${y - 1}`] = {
+                    ...prevPos[`${x - 2}${y - 1}`],
+                    target: true,
+                  };
                 detection.tl = true;
               } else {
                 prevPos[`${x - 2}${y - 1}`] = {
@@ -443,10 +574,14 @@ function App() {
                 prevPos[`${x - 2}${y + 1}`]?.name &&
                 prevPos[`${x - 2}${y + 1}`]?.name !== "point"
               ) {
-                prevPos[`${x - 2}${y + 1}`] = {
-                  ...prevPos[`${x - 2}${y + 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 2}${y + 1}`].color
+                )
+                  prevPos[`${x - 2}${y + 1}`] = {
+                    ...prevPos[`${x - 2}${y + 1}`],
+                    target: true,
+                  };
                 detection.tr = true;
               } else {
                 prevPos[`${x - 2}${y + 1}`] = {
@@ -459,10 +594,14 @@ function App() {
                 prevPos[`${x - 1}${y + 2}`]?.name &&
                 prevPos[`${x - 1}${y + 2}`]?.name !== "point"
               ) {
-                prevPos[`${x - 1}${y + 2}`] = {
-                  ...prevPos[`${x - 1}${y + 2}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 1}${y + 2}`].color
+                )
+                  prevPos[`${x - 1}${y + 2}`] = {
+                    ...prevPos[`${x - 1}${y + 2}`],
+                    target: true,
+                  };
                 detection.rt = true;
               } else {
                 prevPos[`${x - 1}${y + 2}`] = {
@@ -475,10 +614,14 @@ function App() {
                 prevPos[`${x + 1}${y + 2}`]?.name &&
                 prevPos[`${x + 1}${y + 2}`]?.name !== "point"
               ) {
-                prevPos[`${x + 1}${y + 2}`] = {
-                  ...prevPos[`${x + 1}${y + 2}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 1}${y + 2}`].color
+                )
+                  prevPos[`${x + 1}${y + 2}`] = {
+                    ...prevPos[`${x + 1}${y + 2}`],
+                    target: true,
+                  };
                 detection.rb = true;
               } else {
                 prevPos[`${x + 1}${y + 2}`] = {
@@ -491,10 +634,14 @@ function App() {
                 prevPos[`${x + 2}${y + 1}`]?.name &&
                 prevPos[`${x + 2}${y + 1}`]?.name !== "point"
               ) {
-                prevPos[`${x + 2}${y + 1}`] = {
-                  ...prevPos[`${x + 2}${y + 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 2}${y + 1}`].color
+                )
+                  prevPos[`${x + 2}${y + 1}`] = {
+                    ...prevPos[`${x + 2}${y + 1}`],
+                    target: true,
+                  };
                 detection.br = true;
               } else {
                 prevPos[`${x + 2}${y + 1}`] = {
@@ -509,6 +656,10 @@ function App() {
         });
       }
       if (type === "queen") {
+        if (positions?.[`${x}${y}`]?.target) {
+          kill(selected?.current, `${x}${y}`);
+          return;
+        }
         selected.current = `${x}${y}`;
 
         setPositions((prev) => {
@@ -527,10 +678,14 @@ function App() {
           while (iterator <= 7) {
             if (!detection.tl) {
               if (prevPos[`${x - 1 - iterator}${y - 1 - iterator}`]?.name) {
-                prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
-                  ...prevPos[`${x - 1 - iterator}${y - 1 - iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 1 - iterator}${y - 1 - iterator}`].color
+                )
+                  prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
+                    ...prevPos[`${x - 1 - iterator}${y - 1 - iterator}`],
+                    target: true,
+                  };
                 detection.tl = true;
               } else {
                 prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
@@ -541,10 +696,14 @@ function App() {
 
             if (!detection.bl) {
               if (prevPos[`${x + 1 + iterator}${y - 1 - iterator}`]?.name) {
-                prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
-                  ...prevPos[`${x + 1 + iterator}${y - 1 - iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 1 + iterator}${y - 1 - iterator}`].color
+                )
+                  prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
+                    ...prevPos[`${x + 1 + iterator}${y - 1 - iterator}`],
+                    target: true,
+                  };
                 detection.bl = true;
               } else {
                 prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
@@ -554,10 +713,14 @@ function App() {
             }
             if (!detection.tr) {
               if (prevPos[`${x - 1 - iterator}${y + 1 + iterator}`]?.name) {
-                prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
-                  ...prevPos[`${x - 1 - iterator}${y + 1 + iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - 1 - iterator}${y + 1 + iterator}`].color
+                )
+                  prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
+                    ...prevPos[`${x - 1 - iterator}${y + 1 + iterator}`],
+                    target: true,
+                  };
                 detection.tr = true;
               } else {
                 prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
@@ -568,10 +731,14 @@ function App() {
 
             if (!detection.br) {
               if (prevPos[`${x + 1 + iterator}${y + 1 + iterator}`]?.name) {
-                prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
-                  ...prevPos[`${x + 1 + iterator}${y + 1 + iterator}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x + 1 + iterator}${y + 1 + iterator}`].color
+                )
+                  prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
+                    ...prevPos[`${x + 1 + iterator}${y + 1 + iterator}`],
+                    target: true,
+                  };
                 detection.br = true;
               } else {
                 prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
@@ -581,10 +748,14 @@ function App() {
             }
             if (iterator > x && !detection.bottom) {
               if (prevPos[`${iterator}${y}`]?.name) {
-                prevPos[`${iterator}${y}`] = {
-                  ...prevPos[`${iterator}${y}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${iterator}${y}`].color
+                )
+                  prevPos[`${iterator}${y}`] = {
+                    ...prevPos[`${iterator}${y}`],
+                    target: true,
+                  };
                 detection.bottom = true;
               } else {
                 prevPos[`${iterator}${y}`] = { name: "point" };
@@ -592,10 +763,14 @@ function App() {
             }
             if (!detection.top) {
               if (prevPos[`${x - iterator - 1}${y}`]?.name) {
-                prevPos[`${x - iterator - 1}${y}`] = {
-                  ...prevPos[`${x - iterator - 1}${y}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x - iterator - 1}${y}`].color
+                )
+                  prevPos[`${x - iterator - 1}${y}`] = {
+                    ...prevPos[`${x - iterator - 1}${y}`],
+                    target: true,
+                  };
                 detection.top = true;
               } else {
                 prevPos[`${x - iterator - 1}${y}`] = { name: "point" };
@@ -604,10 +779,14 @@ function App() {
 
             if (!detection.right) {
               if (prevPos[`${x}${y + iterator + 1}`]?.name) {
-                prevPos[`${x}${y + iterator + 1}`] = {
-                  ...prevPos[`${x}${y + iterator + 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x}${y + iterator + 1}`].color
+                )
+                  prevPos[`${x}${y + iterator + 1}`] = {
+                    ...prevPos[`${x}${y + iterator + 1}`],
+                    target: true,
+                  };
                 detection.right = true;
               } else {
                 prevPos[`${x}${y + iterator + 1}`] = { name: "point" };
@@ -615,10 +794,14 @@ function App() {
             }
             if (!detection.left) {
               if (prevPos[`${x}${y - iterator - 1}`]?.name) {
-                prevPos[`${x}${y - iterator - 1}`] = {
-                  ...prevPos[`${x}${y - iterator - 1}`],
-                  target: true,
-                };
+                if (
+                  prev[selected.current].color !==
+                  prevPos[`${x}${y - iterator - 1}`].color
+                )
+                  prevPos[`${x}${y - iterator - 1}`] = {
+                    ...prevPos[`${x}${y - iterator - 1}`],
+                    target: true,
+                  };
                 detection.left = true;
               } else {
                 prevPos[`${x}${y - iterator - 1}`] = { name: "point" };
@@ -630,6 +813,8 @@ function App() {
         });
       }
       if (type === "point") {
+        setTurn((prev) => !prev);
+        castle(kingPos, rookPos);
         setPositions((prev) => {
           let prevPos = { ...prev };
           for (const property in prevPos) {
@@ -647,8 +832,21 @@ function App() {
     },
     [positions]
   );
+
   return (
     <>
+      <div className="border-1 w-100 p-2 bg-white h-25">
+        <span className="text-2xl">Player 2</span>
+        <div className="flex">
+          {deleted?.map((i) =>
+            i.includes("white") ? (
+              <img width={30} src={nameIconSet[i]} />
+            ) : (
+              <></>
+            )
+          )}
+        </div>
+      </div>
       <div className="board">
         {row.map((i, idx) => {
           return (
@@ -670,7 +868,12 @@ function App() {
                         drawSuggestion(
                           box.id.split("")[0],
                           box.id.split("")[1],
-                          "point"
+                          positions[
+                            `${box.id.split("")[0]}${box.id.split("")[1]}`
+                          ]?.name,
+                          positions[
+                            `${box.id.split("")[0]}${box.id.split("")[1]}`
+                          ]?.color
                         );
                     }}
                     onDragStart={(e) =>
@@ -692,8 +895,8 @@ function App() {
                     onDragOver={(ev) => ev.preventDefault()}
                     className="w-[calc(100%/8)] flex justify-center items-center"
                     style={{
-                      background: idx % 2 === idxj % 2 ? "#739552" : "#ebecd0",
-                      color: idx % 2 === idxj % 2 ? "white" : "black",
+                      background: idx % 2 !== idxj % 2 ? "#739552" : "#ebecd0",
+                      color: idx % 2 === idxj % 2 ? "black" : "white",
                       boxShadow: pieceType?.target
                         ? "inset 0px 0px 7px 0px red"
                         : "none",
@@ -704,7 +907,7 @@ function App() {
                         src={
                           nameIconSet[
                             pieceType?.name === "point"
-                              ? idx % 2 === idxj % 2
+                              ? idx % 2 !== idxj % 2
                                 ? "lightPoint"
                                 : "darkPoint"
                               : pieceType?.name + pieceType?.color
@@ -719,7 +922,19 @@ function App() {
           );
         })}
       </div>
-      {deleted?.map((i) => i)}
+
+      <div className="border-1 w-100 p-2 bg-white h-25">
+        <span className="text-2xl">Player 1</span>
+        <div className="flex">
+          {deleted?.map((i) =>
+            i.includes("black") ? (
+              <img width={30} src={nameIconSet[i]} />
+            ) : (
+              <></>
+            )
+          )}
+        </div>
+      </div>
     </>
   );
 }
