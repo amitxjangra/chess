@@ -30,8 +30,8 @@ const initialPosition = {
   72: { name: "bishop", color: "white" },
   73: { name: "queen", color: "white" },
   74: { name: "king", color: "white", hasMoved: false },
-  75: { name: "bishop", color: "white" },
-  76: { name: "knight", color: "white" },
+  // 75: { name: "bishop", color: "white" },
+  // 76: { name: "knight", color: "white" },
   77: { name: "rook", color: "white", hasMoved: false },
 };
 
@@ -50,6 +50,7 @@ const nameIconSet = {
   bishopwhite: "/assets/whiteBishop.svg",
   darkPoint: "/assets/dark.png",
   lightPoint: "/assets/light.png",
+  castle: "/assets/castle.svg",
 };
 
 const row = Array(8).fill("");
@@ -59,6 +60,38 @@ function App() {
   const [positions, setPositions] = useState(initialPosition);
   const selected = useRef(null);
   const [deleted, setDeleted] = useState([]);
+
+  const castle = useCallback((kingPos, rookPos, newKingPos, newRookPos) => {
+    setTurn((prev) => !prev);
+    setPositions((prev) => {
+      let tempData = { ...prev };
+
+      // Clear all points and targets
+      for (const property in tempData) {
+        if (
+          tempData[property]?.name === "point" ||
+          tempData[property]?.name === "castle"
+        ) {
+          delete tempData[property];
+        }
+        if (tempData[property]?.target) {
+          tempData[property].target = false;
+        }
+      }
+
+      // Move king
+      const kingPiece = { ...prev[kingPos], hasMoved: true };
+      delete tempData[kingPos];
+      tempData[newKingPos] = kingPiece;
+
+      // Move rook
+      const rookPiece = { ...prev[rookPos], hasMoved: true };
+      delete tempData[rookPos];
+      tempData[newRookPos] = rookPiece;
+
+      return tempData;
+    });
+  }, []);
 
   const kill = useCallback(
     (killer, target) => {
@@ -73,13 +106,23 @@ function App() {
         let tempData = { ...prev };
         delete tempData[killer];
         for (const property in tempData) {
-          if (tempData[property]?.name === "point") {
+          if (
+            tempData[property]?.name === "point" ||
+            tempData[property]?.name === "castle"
+          ) {
             delete tempData[property];
           }
         }
+
+        // Mark the piece as moved
+        const movingPiece = { ...prev[killer] };
+        if (movingPiece.name === "king" || movingPiece.name === "rook") {
+          movingPiece.hasMoved = true;
+        }
+
         return {
           ...tempData,
-          [target]: prev[killer],
+          [target]: movingPiece,
         };
       });
     },
@@ -112,7 +155,10 @@ function App() {
         setPositions((prev) => {
           let prevPos = { ...prev };
           for (const property in prevPos) {
-            if (prevPos[property]?.name === "point") {
+            if (
+              prevPos[property]?.name === "point" ||
+              prevPos[property]?.name === "castle"
+            ) {
               delete prevPos[property];
             }
             if (prevPos[property]?.target) prevPos[property].target = false;
@@ -374,8 +420,25 @@ function App() {
                     prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
-          ...(true && { [`${x}${y + 2}`]: { name: "point" } }),
-          ...(true && { [`${x}${y - 2}`]: { name: "point" } }),
+          // Kingside castling
+          ...(!prev[selected.current]?.hasMoved &&
+            !prev[`${x}${y + 1}`]?.name &&
+            !prev[`${x}${y + 2}`]?.name &&
+            prev[`${x}${y + 3}`]?.name === "rook" &&
+            !prev[`${x}${y + 3}`]?.hasMoved &&
+            prev[`${x}${y + 3}`]?.color === prev[selected.current]?.color && {
+              [`${x}${y + 2}`]: { name: "castle", castleType: "kingside" },
+            }),
+          // Queenside castling
+          ...(!prev[selected.current]?.hasMoved &&
+            !prev[`${x}${y - 1}`]?.name &&
+            !prev[`${x}${y - 2}`]?.name &&
+            !prev[`${x}${y - 3}`]?.name &&
+            prev[`${x}${y - 4}`]?.name === "rook" &&
+            !prev[`${x}${y - 4}`]?.hasMoved &&
+            prev[`${x}${y - 4}`]?.color === prev[selected.current]?.color && {
+              [`${x}${y - 2}`]: { name: "castle", castleType: "queenside" },
+            }),
         }));
       }
       if (type === "bishop") {
@@ -814,23 +877,59 @@ function App() {
       }
       if (type === "point") {
         setTurn((prev) => !prev);
-        // castle(kingPos, rookPos);
         setPositions((prev) => {
           let prevPos = { ...prev };
           for (const property in prevPos) {
-            if (prevPos[property]?.name === "point") {
+            if (
+              prevPos[property]?.name === "point" ||
+              prevPos[property]?.name === "castle"
+            ) {
               delete prevPos[property];
             }
           }
+
+          // Mark the piece as moved
           let transfer = { ...prevPos[selected.current] };
+          if (transfer.name === "king" || transfer.name === "rook") {
+            transfer.hasMoved = true;
+          }
+
           delete prevPos[selected.current];
           prevPos[`${x}${y}`] = transfer;
 
           return prevPos;
         });
       }
+
+      if (type === "castle") {
+        const currentPiece = positions[selected.current];
+        if (currentPiece?.name === "king") {
+          const castleInfo = positions[`${x}${y}`];
+          const kingRow = x;
+          const kingCol = parseInt(selected.current[1]);
+
+          if (castleInfo.castleType === "kingside") {
+            // Kingside castling: king moves 2 squares right, rook moves 2 squares left
+            castle(
+              selected.current,
+              `${kingRow}${kingCol + 3}`,
+              `${kingRow}${kingCol + 2}`,
+              `${kingRow}${kingCol + 1}`
+            );
+          } else if (castleInfo.castleType === "queenside") {
+            // Queenside castling: king moves 2 squares left, rook moves 3 squares right
+            castle(
+              selected.current,
+              `${kingRow}${kingCol - 4}`,
+              `${kingRow}${kingCol - 2}`,
+              `${kingRow}${kingCol - 1}`
+            );
+          }
+        }
+        selected.current = null;
+      }
     },
-    [positions]
+    [positions, castle, kill, turn]
   );
 
   return (
@@ -863,7 +962,8 @@ function App() {
                       let box = ev.target.closest("div");
                       if (
                         positions[box.id]?.target ||
-                        positions[box.id]?.name === "point"
+                        positions[box.id]?.name === "point" ||
+                        positions[box.id]?.name === "castle"
                       )
                         drawSuggestion(
                           box.id.split("")[0],
@@ -876,7 +976,7 @@ function App() {
                           ]?.color
                         );
                     }}
-                    onDragStart={(e) =>
+                    onDragStart={() =>
                       drawSuggestion(
                         idx,
                         idxj,
@@ -884,7 +984,7 @@ function App() {
                         pieceType?.color
                       )
                     }
-                    onClick={(e) =>
+                    onClick={() =>
                       drawSuggestion(
                         idx,
                         idxj,
@@ -904,12 +1004,18 @@ function App() {
                   >
                     {pieceType && (
                       <img
+                        draggable={
+                          pieceType?.name !== "point" &&
+                          pieceType?.name !== "castle"
+                        }
                         src={
                           nameIconSet[
                             pieceType?.name === "point"
                               ? idx % 2 !== idxj % 2
                                 ? "lightPoint"
                                 : "darkPoint"
+                              : pieceType?.name === "castle"
+                              ? "castle"
                               : pieceType?.name + pieceType?.color
                           ]
                         }
