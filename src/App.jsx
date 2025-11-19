@@ -1,10 +1,12 @@
+import Bishop from "./components/pieces/bishop";
 import { useChessBoard, nameIconSet } from "./hooks/useChessBoard";
+import { getPiece } from "./components/pieces/drawPiece";
 
 const row = Array(8).fill("");
 // const DARK_COLOR = "#739552";
 // const LIGHT_COLOR = "#ebecd0";
-const DARK_COLOR = "#36454F";
-const LIGHT_COLOR = "#F0F0F0";
+const DARK_COLOR = "rgb(37,37,37)";
+const LIGHT_COLOR = "rgb(135,135,135)";
 
 function App() {
   const { positions, deleted, drawSuggestion, isCheck, winner } =
@@ -89,7 +91,9 @@ function App() {
                         : "none",
                     }}
                   >
-                    {pieceType && (
+                    {pieceType &&
+                    (pieceType?.name === "point" ||
+                      pieceType?.name === "castle") ? (
                       <img
                         draggable={
                           pieceType?.name !== "point" &&
@@ -106,7 +110,14 @@ function App() {
                               : pieceType?.name + pieceType?.color
                           ]
                         }
-                      ></img>
+                      />
+                    ) : (
+                      pieceType &&
+                      getPiece(
+                        pieceType?.name,
+                        pieceType?.color,
+                        idx % 2 !== idxj % 2
+                      )
                     )}
                   </div>
                 );
