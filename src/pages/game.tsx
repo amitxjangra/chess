@@ -122,7 +122,7 @@ function GameScreen() {
                   <h3 className="text-lg font-serif font-bold text-purple-100">
                     Player 2
                   </h3>
-                  <p className="text-xs text-purple-300">White Pieces</p>
+                  <p className="text-xs text-purple-300">Black Pieces</p>
                 </div>
               </div>
               <div className="flex gap-1 flex-wrap max-w-xs">
@@ -253,7 +253,7 @@ function GameScreen() {
                   <h3 className="text-lg font-serif font-bold text-purple-100">
                     Player 1
                   </h3>
-                  <p className="text-xs text-purple-300">Black Pieces</p>
+                  <p className="text-xs text-purple-300">White Pieces</p>
                 </div>
               </div>
               <div className="flex gap-1 flex-wrap max-w-xs">
