@@ -1,6 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 
-const initialPosition = {
+const initialPosition: Record<
+  string,
+  { name: string; color: "white" | "black"; hasMoved?: boolean }
+> = {
   "00": { name: "rook", color: "black", hasMoved: false },
   "01": { name: "knight", color: "black" },
   "02": { name: "bishop", color: "black" },
@@ -54,30 +57,65 @@ export const nameIconSet = {
 };
 
 export function useChessBoard() {
-  const [turn, setTurn] = useState(true); // true for white
-  const [positions, setPositions] = useState(initialPosition);
-  const selected = useRef(null);
-  const [deleted, setDeleted] = useState([]);
-  const [enPassant, setEnPassant] = useState(null); // { pos: "xy", color: "white"|"black" }
-  const [isCheck, setIsCheck] = useState(false);
-  const [winner, setWinner] = useState(null); // "white" | "black" | null
+  const [turn, setTurn] = useState<boolean>(true); // true for white
+  const [positions, setPositions] = useState<
+    Record<
+      string,
+      {
+        name?: string;
+        color?: "white" | "black";
+        hasMoved?: boolean;
+        castleType?: string;
+        target?: boolean;
+        enPassant?: boolean;
+      }
+    >
+  >(initialPosition);
+  const selected = useRef<null | string>(null);
+  const [deleted, setDeleted] = useState<string[]>([]);
+  const [enPassant, setEnPassant] = useState<null | {
+    pos: string;
+    color: "white" | "black";
+  }>(null);
+  const [isCheck, setIsCheck] = useState<boolean>(false);
+  const [winner, setWinner] = useState<null | "white" | "black">(null); // "white" | "black" | null
+  const [promotionState, setPromotionState] = useState<null | {
+    position: string;
+    color: "white" | "black";
+  }>(null);
 
   // Helper: Find king position for a color
-  const findKing = useCallback((pos, color) => {
-    for (const key in pos) {
-      if (pos[key]?.name === "king" && pos[key]?.color === color) return key;
-    }
-    return null;
-  }, []);
+  const findKing = useCallback(
+    (
+      pos: Record<
+        string,
+        { name?: string; color?: "white" | "black"; hasMoved?: boolean }
+      >,
+      color: "white" | "black"
+    ): string | null => {
+      for (const key in pos) {
+        if (pos[key]?.name === "king" && pos[key]?.color === color) return key;
+      }
+      return null;
+    },
+    []
+  );
 
   // Helper: Get all squares attacked by a color
   const getAttackedSquares = useCallback((pos, color) => {
     const attacked = new Set();
     for (const key in pos) {
       const piece = pos[key];
-      if (!piece || piece.color !== color || piece.name === "point" || piece.name === "castle") continue;
-      const x = parseInt(key[0]), y = parseInt(key[1]);
-      
+      if (
+        !piece ||
+        piece.color !== color ||
+        piece.name === "point" ||
+        piece.name === "castle"
+      )
+        continue;
+      const x = parseInt(key[0]),
+        y = parseInt(key[1]);
+
       if (piece.name === "pawn") {
         if (color === "white") {
           if (x - 1 >= 0 && y - 1 >= 0) attacked.add(`${x - 1}${y - 1}`);
@@ -87,23 +125,47 @@ export function useChessBoard() {
           if (x + 1 <= 7 && y + 1 <= 7) attacked.add(`${x + 1}${y + 1}`);
         }
       } else if (piece.name === "knight") {
-        [[x+2,y+1],[x+2,y-1],[x-2,y+1],[x-2,y-1],[x+1,y+2],[x+1,y-2],[x-1,y+2],[x-1,y-2]].forEach(([nx,ny]) => {
-          if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) attacked.add(`${nx}${ny}`);
+        [
+          [x + 2, y + 1],
+          [x + 2, y - 1],
+          [x - 2, y + 1],
+          [x - 2, y - 1],
+          [x + 1, y + 2],
+          [x + 1, y - 2],
+          [x - 1, y + 2],
+          [x - 1, y - 2],
+        ].forEach(([nx, ny]) => {
+          if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7)
+            attacked.add(`${nx}${ny}`);
         });
       } else if (piece.name === "king") {
-        [[x-1,y-1],[x-1,y],[x-1,y+1],[x,y-1],[x,y+1],[x+1,y-1],[x+1,y],[x+1,y+1]].forEach(([nx,ny]) => {
-          if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) attacked.add(`${nx}${ny}`);
+        [
+          [x - 1, y - 1],
+          [x - 1, y],
+          [x - 1, y + 1],
+          [x, y - 1],
+          [x, y + 1],
+          [x + 1, y - 1],
+          [x + 1, y],
+          [x + 1, y + 1],
+        ].forEach(([nx, ny]) => {
+          if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7)
+            attacked.add(`${nx}${ny}`);
         });
       } else if (["rook", "bishop", "queen"].includes(piece.name)) {
         const dirs = [];
-        if (["rook", "queen"].includes(piece.name)) dirs.push([1,0],[-1,0],[0,1],[0,-1]);
-        if (["bishop", "queen"].includes(piece.name)) dirs.push([1,1],[1,-1],[-1,1],[-1,-1]);
+        if (["rook", "queen"].includes(piece.name))
+          dirs.push([1, 0], [-1, 0], [0, 1], [0, -1]);
+        if (["bishop", "queen"].includes(piece.name))
+          dirs.push([1, 1], [1, -1], [-1, 1], [-1, -1]);
         for (const [dx, dy] of dirs) {
-          let nx = x + dx, ny = y + dy;
+          let nx = x + dx,
+            ny = y + dy;
           while (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) {
             attacked.add(`${nx}${ny}`);
             if (pos[`${nx}${ny}`]?.name) break;
-            nx += dx; ny += dy;
+            nx += dx;
+            ny += dy;
           }
         }
       }
@@ -112,81 +174,115 @@ export function useChessBoard() {
   }, []);
 
   // Helper: Check if a color's king is in check
-  const isKingInCheck = useCallback((pos, color) => {
-    const kingPos = findKing(pos, color);
-    if (!kingPos) return false;
-    const oppColor = color === "white" ? "black" : "white";
-    const attacked = getAttackedSquares(pos, oppColor);
-    return attacked.has(kingPos);
-  }, [findKing, getAttackedSquares]);
+  const isKingInCheck = useCallback(
+    (pos, color) => {
+      const kingPos = findKing(pos, color);
+      if (!kingPos) return false;
+      const oppColor = color === "white" ? "black" : "white";
+      const attacked = getAttackedSquares(pos, oppColor);
+      return attacked.has(kingPos);
+    },
+    [findKing, getAttackedSquares]
+  );
 
   // Helper: Check if a move would leave king in check (for filtering illegal moves)
-  const wouldBeInCheck = useCallback((fromPos, toPos, currentColor) => {
-    const testPos = { ...positions };
-    // Simulate the move
-    const piece = testPos[fromPos];
-    if (!piece) return true;
-    delete testPos[fromPos];
-    testPos[toPos] = piece;
-    // Check if king is in check after move
-    return isKingInCheck(testPos, currentColor);
-  }, [positions, isKingInCheck]);
+  const wouldBeInCheck = useCallback(
+    (fromPos, toPos, currentColor) => {
+      const testPos = { ...positions };
+      // Simulate the move
+      const piece = testPos[fromPos];
+      if (!piece) return true;
+      delete testPos[fromPos];
+      testPos[toPos] = piece;
+      // Check if king is in check after move
+      return isKingInCheck(testPos, currentColor);
+    },
+    [positions, isKingInCheck]
+  );
 
-  const castle = useCallback((kingPos, rookPos, newKingPos, newRookPos) => {
-    const movedColor = positions[kingPos]?.color;
-    setTurn((prev) => !prev);
-    setEnPassant(null);
-    setPositions((prev) => {
-      let tempData = { ...prev };
-      for (const property in tempData) {
-        if (
-          tempData[property]?.name === "point" ||
-          tempData[property]?.name === "castle"
-        ) {
-          delete tempData[property];
-        }
-        if (tempData[property]?.target) {
-          tempData[property].target = false;
-        }
-      }
-      const kingPiece = { ...prev[kingPos], hasMoved: true };
-      delete tempData[kingPos];
-      tempData[newKingPos] = kingPiece;
-      const rookPiece = { ...prev[rookPos], hasMoved: true };
-      delete tempData[rookPos];
-      tempData[newRookPos] = rookPiece;
-      
-      // Check for check/winner after move
-      setTimeout(() => {
-        const nextColor = movedColor === "white" ? "black" : "white";
-        const inCheck = isKingInCheck(tempData, nextColor);
-        setIsCheck(inCheck);
-        if (inCheck) {
-          // Simple checkmate detection - if king has no safe moves
-          const kingPos = findKing(tempData, nextColor);
-          if (kingPos) {
-            const kx = parseInt(kingPos[0]), ky = parseInt(kingPos[1]);
-            const attacked = getAttackedSquares(tempData, movedColor);
-            let hasEscape = false;
-            for (const [dx, dy] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]) {
-              const nx = kx + dx, ny = ky + dy;
-              if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) {
-                const targetKey = `${nx}${ny}`;
-                const targetPiece = tempData[targetKey];
-                if ((!targetPiece || targetPiece.color !== nextColor) && !attacked.has(targetKey)) {
-                  hasEscape = true;
-                  break;
-                }
-              }
-            }
-            if (!hasEscape) setWinner(movedColor);
+  const castle = useCallback(
+    (kingPos, rookPos, newKingPos, newRookPos) => {
+      const movedColor = positions[kingPos]?.color;
+      setTurn((prev) => !prev);
+      setEnPassant(null);
+      setPositions((prev) => {
+        let tempData = { ...prev };
+        for (const property in tempData) {
+          if (
+            tempData[property]?.name === "point" ||
+            tempData[property]?.name === "castle"
+          ) {
+            delete tempData[property];
+          }
+          if (tempData[property]?.target) {
+            tempData[property].target = false;
           }
         }
-      }, 0);
-      
-      return tempData;
-    });
-  }, [positions, isKingInCheck, findKing, getAttackedSquares]);
+        const kingPiece = { ...prev[kingPos], hasMoved: true };
+        delete tempData[kingPos];
+        tempData[newKingPos] = kingPiece;
+        const rookPiece = { ...prev[rookPos], hasMoved: true };
+        delete tempData[rookPos];
+        tempData[newRookPos] = rookPiece;
+
+        // Check for check/winner after move
+        setTimeout(() => {
+          const nextColor = movedColor === "white" ? "black" : "white";
+          const inCheck = isKingInCheck(tempData, nextColor);
+          setIsCheck(inCheck);
+          if (inCheck) {
+            // Simple checkmate detection - if king has no safe moves
+            const kingPos = findKing(tempData, nextColor);
+            if (kingPos) {
+              const kx = parseInt(kingPos[0]),
+                ky = parseInt(kingPos[1]);
+              const attacked = getAttackedSquares(tempData, movedColor);
+              let hasEscape = false;
+              for (const [dx, dy] of [
+                [-1, -1],
+                [-1, 0],
+                [-1, 1],
+                [0, -1],
+                [0, 1],
+                [1, -1],
+                [1, 0],
+                [1, 1],
+              ]) {
+                const nx = kx + dx,
+                  ny = ky + dy;
+                if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) {
+                  const targetKey = `${nx}${ny}`;
+                  const targetPiece = tempData[targetKey];
+                  if (
+                    (!targetPiece || targetPiece.color !== nextColor) &&
+                    !attacked.has(targetKey)
+                  ) {
+                    hasEscape = true;
+                    break;
+                  }
+                }
+              }
+              if (!hasEscape) setWinner(movedColor);
+            }
+          }
+        }, 0);
+
+        return tempData;
+      });
+    },
+    [positions, isKingInCheck, findKing, getAttackedSquares]
+  );
+
+  const promote = useCallback(
+    (position: string, piece: "queen" | "rook" | "bishop" | "knight") => {
+      setPositions((prev) => ({
+        ...prev,
+        [position]: { ...prev[position], name: piece },
+      }));
+      setPromotionState(null);
+    },
+    []
+  );
 
   const kill = useCallback(
     (killer, target, opts = {}) => {
@@ -201,7 +297,8 @@ export function useChessBoard() {
       if (opts.enPassant && opts.capturedPawn && positions[opts.capturedPawn]) {
         setDeleted((deletedTemp) => [
           ...deletedTemp,
-          positions[opts.capturedPawn].name + positions[opts.capturedPawn].color,
+          positions[opts.capturedPawn].name +
+            positions[opts.capturedPawn].color,
         ]);
       }
       setTurn((prev) => !prev);
@@ -232,7 +329,20 @@ export function useChessBoard() {
           ...tempData,
           [target]: movingPiece,
         };
-        
+
+        // Check for pawn promotion
+        if (movingPiece.name === "pawn") {
+          const targetRow = parseInt(target[0]);
+          if (
+            (movingPiece.color === "white" && targetRow === 0) ||
+            (movingPiece.color === "black" && targetRow === 7)
+          ) {
+            setTimeout(() => {
+              setPromotionState({ position: target, color: movingPiece.color });
+            }, 0);
+          }
+        }
+
         // Check for check/winner after move
         setTimeout(() => {
           const nextColor = movedColor === "white" ? "black" : "white";
@@ -241,25 +351,39 @@ export function useChessBoard() {
           if (inCheck) {
             const kingPos = findKing(newPos, nextColor);
             if (kingPos) {
-              const kx = parseInt(kingPos[0]), ky = parseInt(kingPos[1]);
+              const kx = parseInt(kingPos[0]),
+                ky = parseInt(kingPos[1]);
               const attacked = getAttackedSquares(newPos, movedColor);
               let hasEscape = false;
-              for (const [dx, dy] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]) {
-                const nx = kx + dx, ny = ky + dy;
+              for (const [dx, dy] of [
+                [-1, -1],
+                [-1, 0],
+                [-1, 1],
+                [0, -1],
+                [0, 1],
+                [1, -1],
+                [1, 0],
+                [1, 1],
+              ]) {
+                const nx = kx + dx,
+                  ny = ky + dy;
                 if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) {
                   const targetKey = `${nx}${ny}`;
                   const targetPiece = newPos[targetKey];
-                  if ((!targetPiece || targetPiece.color !== nextColor) && !attacked.has(targetKey)) {
+                  if (
+                    (!targetPiece || targetPiece.color !== nextColor) &&
+                    !attacked.has(targetKey)
+                  ) {
                     hasEscape = true;
                     break;
                   }
                 }
               }
-              if (!hasEscape) setWinner(movedColor);
+              if (!hasEscape && movedColor) setWinner(movedColor);
             }
           }
         }, 0);
-        
+
         return newPos;
       });
     },
@@ -267,7 +391,7 @@ export function useChessBoard() {
   );
 
   const drawSuggestion = useCallback(
-    (x, y, type, color) => {
+    (x: number, y: number, type: string, color: "white" | "black") => {
       if (turn && positions[`${x}${y}`].color === "black") {
         if (!positions[`${x}${y}`].target) return;
       }
@@ -307,11 +431,18 @@ export function useChessBoard() {
         // If this square is already marked as a capture target, perform the kill
         if (positions?.[`${x}${y}`]?.target) {
           // Check if this is an en passant capture
-          if (positions[`${x}${y}`]?.enPassant) {
+          if (
+            positions[`${x}${y}`]?.enPassant &&
+            selected.current &&
+            selected.current[0] !== undefined
+          ) {
             // The captured pawn is on the same row as the attacking pawn
             const sourceX = parseInt(selected.current[0]);
             const capturedPawn = `${sourceX}${y}`;
-            kill(selected?.current, `${x}${y}`, { enPassant: true, capturedPawn });
+            kill(selected?.current, `${x}${y}`, {
+              enPassant: true,
+              capturedPawn,
+            });
           } else {
             kill(selected?.current, `${x}${y}`);
           }
@@ -325,7 +456,17 @@ export function useChessBoard() {
 
         if (color === "black") {
           setPositions((prev) => {
-            const entries = {};
+            const entries: Record<
+              string,
+              {
+                target?: true;
+                name?: string;
+                color?: "white" | "black";
+                hasMoved?: boolean;
+                castleType?: string;
+                enPassant?: boolean;
+              }
+            > = {};
             const forward = `${x + 1}${y}`;
             const capL = `${x + 1}${y - 1}`;
             const capR = `${x + 1}${y + 1}`;
@@ -347,12 +488,22 @@ export function useChessBoard() {
             }
 
             // captures
-            if (x + 1 <= 7 && y - 1 >= 0 && prev[capL]?.name) {
+            if (
+              x + 1 <= 7 &&
+              y - 1 >= 0 &&
+              prev[capL]?.name &&
+              selected.current
+            ) {
               if (prev[capL].color !== prev[selected.current].color) {
                 entries[capL] = { ...prev[capL], target: true };
               }
             }
-            if (x + 1 <= 7 && y + 1 <= 7 && prev[capR]?.name) {
+            if (
+              x + 1 <= 7 &&
+              y + 1 <= 7 &&
+              prev[capR]?.name &&
+              selected.current
+            ) {
               if (prev[capR].color !== prev[selected.current].color) {
                 entries[capR] = { ...prev[capR], target: true };
               }
@@ -360,16 +511,44 @@ export function useChessBoard() {
 
             // En passant for black (capture white pawn on row 4)
             if (enPassant && enPassant.color === "white" && x === 4) {
-              if (y - 1 >= 0 && prev[`${x}${y - 1}`]?.name === "pawn" && prev[`${x}${y - 1}`].color === "white" && enPassant.pos === `${x}${y - 1}`) {
-                entries[`${x + 1}${y - 1}`] = { name: "point", enPassant: true, target: true };
+              if (
+                y - 1 >= 0 &&
+                prev[`${x}${y - 1}`]?.name === "pawn" &&
+                prev[`${x}${y - 1}`].color === "white" &&
+                enPassant.pos === `${x}${y - 1}`
+              ) {
+                entries[`${x + 1}${y - 1}`] = {
+                  name: "point",
+                  enPassant: true,
+                  target: true,
+                };
               }
-              if (y + 1 <= 7 && prev[`${x}${y + 1}`]?.name === "pawn" && prev[`${x}${y + 1}`].color === "white" && enPassant.pos === `${x}${y + 1}`) {
-                entries[`${x + 1}${y + 1}`] = { name: "point", enPassant: true, target: true };
+              if (
+                y + 1 <= 7 &&
+                prev[`${x}${y + 1}`]?.name === "pawn" &&
+                prev[`${x}${y + 1}`].color === "white" &&
+                enPassant.pos === `${x}${y + 1}`
+              ) {
+                entries[`${x + 1}${y + 1}`] = {
+                  name: "point",
+                  enPassant: true,
+                  target: true,
+                };
               }
             }
 
             // Filter out moves that would leave king in check
-            const filtered = {};
+            const filtered: Record<
+              string,
+              {
+                target?: true;
+                name?: string;
+                color?: "white" | "black";
+                hasMoved?: boolean;
+                castleType?: string;
+                enPassant?: boolean;
+              }
+            > = {};
             for (const key in entries) {
               if (!wouldBeInCheck(`${x}${y}`, key, color)) {
                 filtered[key] = entries[key];
@@ -380,7 +559,17 @@ export function useChessBoard() {
           });
         } else {
           setPositions((prev) => {
-            const entries = {};
+            const entries: Record<
+              string,
+              {
+                target?: true;
+                name?: string;
+                color?: "white" | "black";
+                hasMoved?: boolean;
+                castleType?: string;
+                enPassant?: boolean;
+              }
+            > = {};
             const forward = `${x - 1}${y}`;
             const capL = `${x - 1}${y - 1}`;
             const capR = `${x - 1}${y + 1}`;
@@ -402,12 +591,22 @@ export function useChessBoard() {
             }
 
             // captures
-            if (x - 1 >= 0 && y - 1 >= 0 && prev[capL]?.name) {
+            if (
+              x - 1 >= 0 &&
+              y - 1 >= 0 &&
+              prev[capL]?.name &&
+              selected.current
+            ) {
               if (prev[capL].color !== prev[selected.current].color) {
                 entries[capL] = { ...prev[capL], target: true };
               }
             }
-            if (x - 1 >= 0 && y + 1 <= 7 && prev[capR]?.name) {
+            if (
+              x - 1 >= 0 &&
+              y + 1 <= 7 &&
+              prev[capR]?.name &&
+              selected.current
+            ) {
               if (prev[capR].color !== prev[selected.current].color) {
                 entries[capR] = { ...prev[capR], target: true };
               }
@@ -415,16 +614,44 @@ export function useChessBoard() {
 
             // En passant for white (capture black pawn on row 3)
             if (enPassant && enPassant.color === "black" && x === 3) {
-              if (y - 1 >= 0 && prev[`${x}${y - 1}`]?.name === "pawn" && prev[`${x}${y - 1}`].color === "black" && enPassant.pos === `${x}${y - 1}`) {
-                entries[`${x - 1}${y - 1}`] = { name: "point", enPassant: true, target: true };
+              if (
+                y - 1 >= 0 &&
+                prev[`${x}${y - 1}`]?.name === "pawn" &&
+                prev[`${x}${y - 1}`].color === "black" &&
+                enPassant.pos === `${x}${y - 1}`
+              ) {
+                entries[`${x - 1}${y - 1}`] = {
+                  name: "point",
+                  enPassant: true,
+                  target: true,
+                };
               }
-              if (y + 1 <= 7 && prev[`${x}${y + 1}`]?.name === "pawn" && prev[`${x}${y + 1}`].color === "black" && enPassant.pos === `${x}${y + 1}`) {
-                entries[`${x - 1}${y + 1}`] = { name: "point", enPassant: true, target: true };
+              if (
+                y + 1 <= 7 &&
+                prev[`${x}${y + 1}`]?.name === "pawn" &&
+                prev[`${x}${y + 1}`].color === "black" &&
+                enPassant.pos === `${x}${y + 1}`
+              ) {
+                entries[`${x - 1}${y + 1}`] = {
+                  name: "point",
+                  enPassant: true,
+                  target: true,
+                };
               }
             }
 
             // Filter out moves that would leave king in check
-            const filtered = {};
+            const filtered: Record<
+              string,
+              {
+                target?: true;
+                name?: string;
+                color?: "white" | "black";
+                hasMoved?: boolean;
+                castleType?: string;
+                enPassant?: boolean;
+              }
+            > = {};
             for (const key in entries) {
               if (!wouldBeInCheck(`${x}${y}`, key, color)) {
                 filtered[key] = entries[key];
@@ -456,8 +683,9 @@ export function useChessBoard() {
             if (iterator > x && !detection.bottom) {
               if (prevPos[`${iterator}${y}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${iterator}${y}`].color
+                    prevPos[`${iterator}${y}`].color
                 )
                   prevPos[`${iterator}${y}`] = {
                     ...prevPos[`${iterator}${y}`],
@@ -471,8 +699,9 @@ export function useChessBoard() {
             if (!detection.top) {
               if (prevPos[`${x - iterator - 1}${y}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - iterator - 1}${y}`].color
+                    prevPos[`${x - iterator - 1}${y}`].color
                 )
                   prevPos[`${x - iterator - 1}${y}`] = {
                     ...prevPos[`${x - iterator - 1}${y}`],
@@ -487,8 +716,9 @@ export function useChessBoard() {
             if (!detection.right) {
               if (prevPos[`${x}${y + iterator + 1}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x}${y + iterator + 1}`].color
+                    prevPos[`${x}${y + iterator + 1}`].color
                 )
                   prevPos[`${x}${y + iterator + 1}`] = {
                     ...prevPos[`${x}${y + iterator + 1}`],
@@ -502,8 +732,9 @@ export function useChessBoard() {
             if (!detection.left) {
               if (prevPos[`${x}${y - iterator - 1}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x}${y - iterator - 1}`].color
+                    prevPos[`${x}${y - iterator - 1}`].color
                 )
                   prevPos[`${x}${y - iterator - 1}`] = {
                     ...prevPos[`${x}${y - iterator - 1}`],
@@ -516,17 +747,20 @@ export function useChessBoard() {
             }
             iterator++;
           }
-          
+
           // Filter out moves that would leave king in check
           const filtered = { ...prevPos };
           for (const key in filtered) {
             if (filtered[key]?.name === "point" || filtered[key]?.target) {
-              if (wouldBeInCheck(`${x}${y}`, key, prev[selected.current].color)) {
+              if (
+                selected.current &&
+                wouldBeInCheck(`${x}${y}`, key, prev[selected.current].color)
+              ) {
                 delete filtered[key];
               }
             }
           }
-          
+
           return filtered;
         });
       }
@@ -544,8 +778,9 @@ export function useChessBoard() {
               : prev[`${x - 1}${y - 1}`]?.name
               ? {
                   ...prev[`${x - 1}${y - 1}`],
-                  ...(prev[`${x - 1}${y - 1}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x - 1}${y - 1}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x - 1}${y}`]:
@@ -554,8 +789,9 @@ export function useChessBoard() {
               : prev[`${x - 1}${y}`]?.name
               ? {
                   ...prev[`${x - 1}${y}`],
-                  ...(prev[`${x - 1}${y}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x - 1}${y}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x - 1}${y + 1}`]:
@@ -564,8 +800,9 @@ export function useChessBoard() {
               : prev[`${x - 1}${y + 1}`]?.name
               ? {
                   ...prev[`${x - 1}${y + 1}`],
-                  ...(prev[`${x - 1}${y + 1}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x - 1}${y + 1}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x}${y + 1}`]:
@@ -574,8 +811,9 @@ export function useChessBoard() {
               : prev[`${x}${y + 1}`]?.name
               ? {
                   ...prev[`${x}${y + 1}`],
-                  ...(prev[`${x}${y + 1}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x}${y + 1}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x}${y - 1}`]:
@@ -584,8 +822,9 @@ export function useChessBoard() {
               : prev[`${x}${y - 1}`]?.name
               ? {
                   ...prev[`${x}${y - 1}`],
-                  ...(prev[`${x}${y - 1}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x}${y - 1}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x + 1}${y - 1}`]:
@@ -594,8 +833,9 @@ export function useChessBoard() {
               : prev[`${x + 1}${y - 1}`]?.name
               ? {
                   ...prev[`${x + 1}${y - 1}`],
-                  ...(prev[`${x + 1}${y - 1}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x + 1}${y - 1}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x + 1}${y}`]:
@@ -604,8 +844,9 @@ export function useChessBoard() {
               : prev[`${x + 1}${y}`]?.name
               ? {
                   ...prev[`${x + 1}${y}`],
-                  ...(prev[`${x + 1}${y}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x + 1}${y}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           [`${x + 1}${y + 1}`]:
@@ -614,36 +855,42 @@ export function useChessBoard() {
               : prev[`${x + 1}${y + 1}`]?.name
               ? {
                   ...prev[`${x + 1}${y + 1}`],
-                  ...(prev[`${x + 1}${y + 1}`].color !==
-                    prev[selected.current].color && { target: true }),
+                  ...(selected.current &&
+                    prev[`${x + 1}${y + 1}`].color !==
+                      prev[selected.current].color && { target: true }),
                 }
               : { name: "point" },
           // Kingside castling
-          ...(!prev[selected.current]?.hasMoved &&
+          ...(!prev[selected.current ?? ""]?.hasMoved &&
             !prev[`${x}${y + 1}`]?.name &&
             !prev[`${x}${y + 2}`]?.name &&
             prev[`${x}${y + 3}`]?.name === "rook" &&
             !prev[`${x}${y + 3}`]?.hasMoved &&
-            prev[`${x}${y + 3}`]?.color === prev[selected.current]?.color && {
+            prev[`${x}${y + 3}`]?.color ===
+              prev[selected.current ?? ""]?.color && {
               [`${x}${y + 2}`]: { name: "castle", castleType: "kingside" },
             }),
           // Queenside castling
-          ...(!prev[selected.current]?.hasMoved &&
+          ...(!prev[selected.current ?? ""]?.hasMoved &&
             !prev[`${x}${y - 1}`]?.name &&
             !prev[`${x}${y - 2}`]?.name &&
             !prev[`${x}${y - 3}`]?.name &&
             prev[`${x}${y - 4}`]?.name === "rook" &&
             !prev[`${x}${y - 4}`]?.hasMoved &&
-            prev[`${x}${y - 4}`]?.color === prev[selected.current]?.color && {
+            prev[`${x}${y - 4}`]?.color ===
+              prev[selected.current ?? ""]?.color && {
               [`${x}${y - 2}`]: { name: "castle", castleType: "queenside" },
             }),
         }));
-        
+
         // Filter out king moves that would leave king in check
         setPositions((prev) => {
           const filtered = { ...prev };
           for (const key in filtered) {
-            if ((filtered[key]?.name === "point" || filtered[key]?.target) && key !== `${x}${y}`) {
+            if (
+              (filtered[key]?.name === "point" || filtered[key]?.target) &&
+              key !== `${x}${y}`
+            ) {
               if (wouldBeInCheck(`${x}${y}`, key, color)) {
                 delete filtered[key];
               }
@@ -671,8 +918,9 @@ export function useChessBoard() {
             if (!detection.tl) {
               if (prevPos[`${x - 1 - iterator}${y - 1 - iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 1 - iterator}${y - 1 - iterator}`].color
+                    prevPos[`${x - 1 - iterator}${y - 1 - iterator}`].color
                 )
                   prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
                     ...prevPos[`${x - 1 - iterator}${y - 1 - iterator}`],
@@ -689,8 +937,9 @@ export function useChessBoard() {
             if (!detection.bl) {
               if (prevPos[`${x + 1 + iterator}${y - 1 - iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 1 + iterator}${y - 1 - iterator}`].color
+                    prevPos[`${x + 1 + iterator}${y - 1 - iterator}`].color
                 )
                   prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
                     ...prevPos[`${x + 1 + iterator}${y - 1 - iterator}`],
@@ -706,8 +955,9 @@ export function useChessBoard() {
             if (!detection.tr) {
               if (prevPos[`${x - 1 - iterator}${y + 1 + iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 1 - iterator}${y + 1 + iterator}`].color
+                    prevPos[`${x - 1 - iterator}${y + 1 + iterator}`].color
                 )
                   prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
                     ...prevPos[`${x - 1 - iterator}${y + 1 + iterator}`],
@@ -724,8 +974,9 @@ export function useChessBoard() {
             if (!detection.br) {
               if (prevPos[`${x + 1 + iterator}${y + 1 + iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 1 + iterator}${y + 1 + iterator}`].color
+                    prevPos[`${x + 1 + iterator}${y + 1 + iterator}`].color
                 )
                   prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
                     ...prevPos[`${x + 1 + iterator}${y + 1 + iterator}`],
@@ -740,17 +991,23 @@ export function useChessBoard() {
             }
             iterator++;
           }
-          
+
           // Filter out moves that would leave king in check
           const filtered = { ...prevPos };
           for (const key in filtered) {
             if (filtered[key]?.name === "point" || filtered[key]?.target) {
-              if (wouldBeInCheck(`${x}${y}`, key, prev[selected.current].color)) {
+              if (
+                wouldBeInCheck(
+                  `${x}${y}`,
+                  key,
+                  prev[selected.current ?? ""].color
+                )
+              ) {
                 delete filtered[key];
               }
             }
           }
-          
+
           return filtered;
         });
       }
@@ -780,8 +1037,9 @@ export function useChessBoard() {
                 prevPos[`${x + 2}${y - 1}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 2}${y - 1}`].color
+                    prevPos[`${x + 2}${y - 1}`].color
                 )
                   prevPos[`${x + 2}${y - 1}`] = {
                     ...prevPos[`${x + 2}${y - 1}`],
@@ -800,8 +1058,9 @@ export function useChessBoard() {
                 prevPos[`${x + 1}${y - 2}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 1}${y - 2}`].color
+                    prevPos[`${x + 1}${y - 2}`].color
                 )
                   prevPos[`${x + 1}${y - 2}`] = {
                     ...prevPos[`${x + 1}${y - 2}`],
@@ -820,8 +1079,9 @@ export function useChessBoard() {
                 prevPos[`${x - 1}${y - 2}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 1}${y - 2}`].color
+                    prevPos[`${x - 1}${y - 2}`].color
                 )
                   prevPos[`${x - 1}${y - 2}`] = {
                     ...prevPos[`${x - 1}${y - 2}`],
@@ -840,8 +1100,9 @@ export function useChessBoard() {
                 prevPos[`${x - 2}${y - 1}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 2}${y - 1}`].color
+                    prevPos[`${x - 2}${y - 1}`].color
                 )
                   prevPos[`${x - 2}${y - 1}`] = {
                     ...prevPos[`${x - 2}${y - 1}`],
@@ -860,8 +1121,9 @@ export function useChessBoard() {
                 prevPos[`${x - 2}${y + 1}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 2}${y + 1}`].color
+                    prevPos[`${x - 2}${y + 1}`].color
                 )
                   prevPos[`${x - 2}${y + 1}`] = {
                     ...prevPos[`${x - 2}${y + 1}`],
@@ -880,8 +1142,9 @@ export function useChessBoard() {
                 prevPos[`${x - 1}${y + 2}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 1}${y + 2}`].color
+                    prevPos[`${x - 1}${y + 2}`].color
                 )
                   prevPos[`${x - 1}${y + 2}`] = {
                     ...prevPos[`${x - 1}${y + 2}`],
@@ -900,8 +1163,9 @@ export function useChessBoard() {
                 prevPos[`${x + 1}${y + 2}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 1}${y + 2}`].color
+                    prevPos[`${x + 1}${y + 2}`].color
                 )
                   prevPos[`${x + 1}${y + 2}`] = {
                     ...prevPos[`${x + 1}${y + 2}`],
@@ -920,8 +1184,9 @@ export function useChessBoard() {
                 prevPos[`${x + 2}${y + 1}`]?.name !== "point"
               ) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 2}${y + 1}`].color
+                    prevPos[`${x + 2}${y + 1}`].color
                 )
                   prevPos[`${x + 2}${y + 1}`] = {
                     ...prevPos[`${x + 2}${y + 1}`],
@@ -937,17 +1202,23 @@ export function useChessBoard() {
 
             iterator++;
           }
-          
+
           // Filter out moves that would leave king in check
           const filtered = { ...prevPos };
           for (const key in filtered) {
             if (filtered[key]?.name === "point" || filtered[key]?.target) {
-              if (wouldBeInCheck(`${x}${y}`, key, prev[selected.current].color)) {
+              if (
+                wouldBeInCheck(
+                  `${x}${y}`,
+                  key,
+                  prev[selected.current ?? ""].color
+                )
+              ) {
                 delete filtered[key];
               }
             }
           }
-          
+
           return filtered;
         });
       }
@@ -975,8 +1246,9 @@ export function useChessBoard() {
             if (!detection.tl) {
               if (prevPos[`${x - 1 - iterator}${y - 1 - iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 1 - iterator}${y - 1 - iterator}`].color
+                    prevPos[`${x - 1 - iterator}${y - 1 - iterator}`].color
                 )
                   prevPos[`${x - 1 - iterator}${y - 1 - iterator}`] = {
                     ...prevPos[`${x - 1 - iterator}${y - 1 - iterator}`],
@@ -993,8 +1265,9 @@ export function useChessBoard() {
             if (!detection.bl) {
               if (prevPos[`${x + 1 + iterator}${y - 1 - iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 1 + iterator}${y - 1 - iterator}`].color
+                    prevPos[`${x + 1 + iterator}${y - 1 - iterator}`].color
                 )
                   prevPos[`${x + 1 + iterator}${y - 1 - iterator}`] = {
                     ...prevPos[`${x + 1 + iterator}${y - 1 - iterator}`],
@@ -1010,8 +1283,9 @@ export function useChessBoard() {
             if (!detection.tr) {
               if (prevPos[`${x - 1 - iterator}${y + 1 + iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - 1 - iterator}${y + 1 + iterator}`].color
+                    prevPos[`${x - 1 - iterator}${y + 1 + iterator}`].color
                 )
                   prevPos[`${x - 1 - iterator}${y + 1 + iterator}`] = {
                     ...prevPos[`${x - 1 - iterator}${y + 1 + iterator}`],
@@ -1028,8 +1302,9 @@ export function useChessBoard() {
             if (!detection.br) {
               if (prevPos[`${x + 1 + iterator}${y + 1 + iterator}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x + 1 + iterator}${y + 1 + iterator}`].color
+                    prevPos[`${x + 1 + iterator}${y + 1 + iterator}`].color
                 )
                   prevPos[`${x + 1 + iterator}${y + 1 + iterator}`] = {
                     ...prevPos[`${x + 1 + iterator}${y + 1 + iterator}`],
@@ -1045,8 +1320,9 @@ export function useChessBoard() {
             if (iterator > x && !detection.bottom) {
               if (prevPos[`${iterator}${y}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${iterator}${y}`].color
+                    prevPos[`${iterator}${y}`].color
                 )
                   prevPos[`${iterator}${y}`] = {
                     ...prevPos[`${iterator}${y}`],
@@ -1060,8 +1336,9 @@ export function useChessBoard() {
             if (!detection.top) {
               if (prevPos[`${x - iterator - 1}${y}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x - iterator - 1}${y}`].color
+                    prevPos[`${x - iterator - 1}${y}`].color
                 )
                   prevPos[`${x - iterator - 1}${y}`] = {
                     ...prevPos[`${x - iterator - 1}${y}`],
@@ -1076,8 +1353,9 @@ export function useChessBoard() {
             if (!detection.right) {
               if (prevPos[`${x}${y + iterator + 1}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x}${y + iterator + 1}`].color
+                    prevPos[`${x}${y + iterator + 1}`].color
                 )
                   prevPos[`${x}${y + iterator + 1}`] = {
                     ...prevPos[`${x}${y + iterator + 1}`],
@@ -1091,8 +1369,9 @@ export function useChessBoard() {
             if (!detection.left) {
               if (prevPos[`${x}${y - iterator - 1}`]?.name) {
                 if (
+                  selected.current &&
                   prev[selected.current].color !==
-                  prevPos[`${x}${y - iterator - 1}`].color
+                    prevPos[`${x}${y - iterator - 1}`].color
                 )
                   prevPos[`${x}${y - iterator - 1}`] = {
                     ...prevPos[`${x}${y - iterator - 1}`],
@@ -1105,43 +1384,50 @@ export function useChessBoard() {
             }
             iterator++;
           }
-          
+
           // Filter out moves that would leave king in check
           const filtered = { ...prevPos };
           for (const key in filtered) {
             if (filtered[key]?.name === "point" || filtered[key]?.target) {
-              if (wouldBeInCheck(`${x}${y}`, key, prev[selected.current].color)) {
+              if (
+                wouldBeInCheck(
+                  `${x}${y}`,
+                  key,
+                  prev[selected.current ?? ""].color
+                )
+              ) {
                 delete filtered[key];
               }
             }
           }
-          
+
           return filtered;
         });
       }
       if (type === "point") {
         // Handle en passant capture
-        if (positions[`${x}${y}`]?.enPassant) {
+        if (positions[`${x}${y}`]?.enPassant && selected.current) {
           const color = positions[selected.current].color;
-          const targetX = parseInt(x);
-          const capturedPawn = color === "black" ? `${targetX - 1}${y}` : `${targetX + 1}${y}`;
-          console.log('🎯 EN PASSANT via point:', {
+          const targetX = parseInt(`${x}`);
+          const capturedPawn =
+            color === "black" ? `${targetX - 1}${y}` : `${targetX + 1}${y}`;
+          console.log("🎯 EN PASSANT via point:", {
             from: selected.current,
             to: `${x}${y}`,
             color,
             capturedPawn,
-            capturedPiece: positions[capturedPawn]
+            capturedPiece: positions[capturedPawn],
           });
           kill(selected.current, `${x}${y}`, { enPassant: true, capturedPawn });
           return;
         }
-        
-        const movedColor = positions[selected.current]?.color;
-        console.log('♟️ MOVE:', {
-          piece: positions[selected.current]?.name,
+
+        const movedColor = positions[selected.current ?? ""]?.color;
+        console.log("♟️ MOVE:", {
+          piece: positions[selected.current ?? ""]?.name,
           color: movedColor,
           from: selected.current,
-          to: `${x}${y}`
+          to: `${x}${y}`,
         });
         setTurn((prev) => !prev);
         setPositions((prev) => {
@@ -1160,20 +1446,40 @@ export function useChessBoard() {
           }
 
           // Mark the piece as moved
-          let transfer = { ...prevPos[selected.current] };
+          let transfer = { ...prevPos[selected.current ?? ""] };
           if (transfer.name === "king" || transfer.name === "rook") {
             transfer.hasMoved = true;
           }
 
           // Track pawn double-step for en passant
-          if (transfer.name === "pawn" && Math.abs(x - parseInt(selected.current[0])) === 2) {
+          if (
+            selected.current &&
+            transfer.name === "pawn" &&
+            Math.abs(x - parseInt(selected.current[0])) === 2 &&
+            transfer.color !== undefined
+          ) {
             setEnPassant({ pos: `${x}${y}`, color: transfer.color });
           } else {
             setEnPassant(null);
           }
 
-          delete prevPos[selected.current];
+          delete prevPos[selected.current ?? ""];
           prevPos[`${x}${y}`] = transfer;
+
+          // Check for pawn promotion
+          if (transfer.name === "pawn") {
+            if (
+              (transfer.color === "white" && x === 0) ||
+              (transfer.color === "black" && x === 7)
+            ) {
+              setTimeout(() => {
+                setPromotionState({
+                  position: `${x}${y}`,
+                  color: transfer.color,
+                });
+              }, 0);
+            }
+          }
 
           // Check for check/winner after move
           setTimeout(() => {
@@ -1183,21 +1489,35 @@ export function useChessBoard() {
             if (inCheck) {
               const kingPos = findKing(prevPos, nextColor);
               if (kingPos) {
-                const kx = parseInt(kingPos[0]), ky = parseInt(kingPos[1]);
+                const kx = parseInt(kingPos[0]),
+                  ky = parseInt(kingPos[1]);
                 const attacked = getAttackedSquares(prevPos, movedColor);
                 let hasEscape = false;
-                for (const [dx, dy] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]) {
-                  const nx = kx + dx, ny = ky + dy;
+                for (const [dx, dy] of [
+                  [-1, -1],
+                  [-1, 0],
+                  [-1, 1],
+                  [0, -1],
+                  [0, 1],
+                  [1, -1],
+                  [1, 0],
+                  [1, 1],
+                ]) {
+                  const nx = kx + dx,
+                    ny = ky + dy;
                   if (nx >= 0 && nx <= 7 && ny >= 0 && ny <= 7) {
                     const targetKey = `${nx}${ny}`;
                     const targetPiece = prevPos[targetKey];
-                    if ((!targetPiece || targetPiece.color !== nextColor) && !attacked.has(targetKey)) {
+                    if (
+                      (!targetPiece || targetPiece.color !== nextColor) &&
+                      !attacked.has(targetKey)
+                    ) {
                       hasEscape = true;
                       break;
                     }
                   }
                 }
-                if (!hasEscape) setWinner(movedColor);
+                if (!hasEscape && movedColor) setWinner(movedColor);
               }
             }
           }, 0);
@@ -1206,7 +1526,7 @@ export function useChessBoard() {
         });
       }
 
-      if (type === "castle") {
+      if (type === "castle" && selected.current) {
         const currentPiece = positions[selected.current];
         if (currentPiece?.name === "king") {
           const castleInfo = positions[`${x}${y}`];
@@ -1234,7 +1554,17 @@ export function useChessBoard() {
         selected.current = null;
       }
     },
-    [positions, castle, kill, turn, enPassant, wouldBeInCheck, isKingInCheck, findKing, getAttackedSquares]
+    [
+      positions,
+      castle,
+      kill,
+      turn,
+      enPassant,
+      wouldBeInCheck,
+      isKingInCheck,
+      findKing,
+      getAttackedSquares,
+    ]
   );
 
   return {
@@ -1251,5 +1581,7 @@ export function useChessBoard() {
     isCheck,
     winner,
     enPassant,
+    promotionState,
+    promote,
   };
 }
